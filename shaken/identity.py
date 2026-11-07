@@ -21,18 +21,18 @@ __all__ = [
 
 
 def build_header(token: str, info: str) -> str:
-    """Pending behaviour defined by RFC 8224.
+    """Pending behaviour defined by RFC 8224 sec. 4.
 
     Not implemented yet. See the ``identity.build_header()`` row in ROADMAP.md; this stub
     raises on purpose so nothing downstream mistakes it for working code.
     """
-    raise NotImplementedError("build_header() is not implemented: RFC 8224")
+    raise NotImplementedError("build_header() is not implemented: RFC 8224 sec. 4")
 
 
 def parse_header(value: str) -> IdentityHeader:
-    """Pending behaviour defined by RFC 8224.
+    """Pending behaviour defined by RFC 8224 sec. 4.
 
     Not implemented yet. See the ``identity.parse_header()`` row in ROADMAP.md; this stub
     raises on purpose so nothing downstream mistakes it for working code.
     """
-    raise NotImplementedError("parse_header() is not implemented: RFC 8224")
+    raise NotImplementedError("parse_header() is not implemented: RFC 8224 sec. 4")

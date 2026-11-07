@@ -22,9 +22,9 @@ __all__ = [
 
 
 def verify_request(headers: Headers, store: TrustStore) -> Verification:
-    """Pending behaviour defined by RFC 8224.
+    """Pending behaviour defined by RFC 8224 sec. 6.2.
 
     Not implemented yet. See the ``verify.verify_request()`` row in ROADMAP.md; this stub
     raises on purpose so nothing downstream mistakes it for working code.
     """
-    raise NotImplementedError("verify_request() is not implemented: RFC 8224")
+    raise NotImplementedError("verify_request() is not implemented: RFC 8224 sec. 6.2")

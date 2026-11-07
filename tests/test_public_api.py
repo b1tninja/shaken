@@ -18,11 +18,11 @@ SURFACE = [
     ("passport", "create", "RFC 8225"),
     ("passport", "verify", "RFC 8225"),
     ("claims", "shaken_claims", "RFC 8588"),
-    ("identity", "build_header", "RFC 8224"),
-    ("identity", "parse_header", "RFC 8224"),
-    ("credentials", "resolve", "RFC 8225"),
-    ("attest", "policy_for", "RFC 8588"),
-    ("verify", "verify_request", "RFC 8224"),
+    ("identity", "build_header", "RFC 8224 sec. 4"),
+    ("identity", "parse_header", "RFC 8224 sec. 4"),
+    ("credentials", "resolve", "RFC 8225 sec. 4.3"),
+    ("attest", "policy_for", "RFC 8588 sec. 4"),
+    ("verify", "verify_request", "RFC 8224 sec. 6.2"),
 ]
 
 
@@ -40,7 +40,10 @@ def test_surface_is_documented(module_name, fn, cite):
     module = importlib.import_module(package.__name__ + "." + module_name)
     target = getattr(module, fn)
     assert target.__doc__, fn + " needs a docstring"
-    assert cite in target.__doc__, fn + " must cite the document that defines it"
+    # Docstrings are wrapped, so a long citation can span a line break; compare words, not layout.
+    assert " ".join(cite.split()) in " ".join(target.__doc__.split()), (
+        fn + " must cite the document that defines it"
+    )
 
 
 @pytest.mark.parametrize(("module_name", "fn", "cite"), SURFACE)

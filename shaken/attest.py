@@ -20,9 +20,9 @@ __all__ = [
 
 
 def policy_for(level: str) -> Policy:
-    """Pending behaviour defined by RFC 8588.
+    """Pending behaviour defined by RFC 8588 sec. 4.
 
     Not implemented yet. See the ``attest.policy_for()`` row in ROADMAP.md; this stub
     raises on purpose so nothing downstream mistakes it for working code.
     """
-    raise NotImplementedError("policy_for() is not implemented: RFC 8588")
+    raise NotImplementedError("policy_for() is not implemented: RFC 8588 sec. 4")

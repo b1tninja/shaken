@@ -21,9 +21,9 @@ __all__ = [
 
 
 def resolve(x5u: str | None, x5c: list | None, store: TrustStore) -> Certificate:
-    """Pending behaviour defined by RFC 8225.
+    """Pending behaviour defined by RFC 8225 sec. 4.3.
 
     Not implemented yet. See the ``credentials.resolve()`` row in ROADMAP.md; this stub
     raises on purpose so nothing downstream mistakes it for working code.
     """
-    raise NotImplementedError("resolve() is not implemented: RFC 8225")
+    raise NotImplementedError("resolve() is not implemented: RFC 8225 sec. 4.3")

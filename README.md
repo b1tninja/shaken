@@ -51,7 +51,7 @@ document, which is the honest grain size for a plan. See [docs/rfc-map.md](docs/
 ### Errata watch
 
 - RFC 8224 carries 2 verified errata and is updated by RFC 8946; RFC 8588 carries 1 verified erratum.
-- RFC 8225 has 2 errata on file with none verified: re-check the page before M1.
+- RFC 8225 has 2 errata on file and none verified as of 2026-11-07 (rfclib): 5392 is Held for Document Update and concerns the iat claim, 5985 is Reported and editorial.
 - Policy questions (what to do with a failed verification) belong to ATIS, not the RFCs. Say which document decided.
 
 ## Module layout
@@ -76,7 +76,8 @@ document, which is the honest grain size for a plan. See [docs/rfc-map.md](docs/
 ## Install
 
 ```bash
-git clone https://github.com/b1tninja/shaken.cd shaken
+git clone https://github.com/b1tninja/shaken.git
+cd shaken
 python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\\Scripts\\Activate.ps1
 pip install -e ".[dev]"
