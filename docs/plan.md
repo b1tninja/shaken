@@ -18,17 +18,26 @@ dependency chain.
 
 ## Depends on
 
-- **asn1core** - a PASSporT is only as trustworthy as the certificate the originating provider
-  publishes at its x5u, and parsing that certificate is asn1core's job, not shaken's. **Status:
-  exists as code.** It has source files and a test suite of its own, and its own README states
-  its release status. That it exists does not say it provides what a row here needs: which
-  capability a row consumes is decided row by row.
+- **pkix** - a PASSporT is only as trustworthy as the certificate chain behind its x5u, and
+  `verify.verify_request()` has to validate that chain to an STI trust anchor. That is RFC 5280
+  path validation, which is pkix's job. **Status: shell with some rows done.** Its
+  `anchors.load_anchor()` and `chain.candidates()` rows are `[ok]`; `validity.check_signature()`,
+  `validity.check_validity()` and `result.validate()` are still `[ ]`, so the chain-validation row
+  here (`credentials.chain-validation`) is blocked on them. This corrects an earlier "Depends on:
+  None" (and the generated text that named only asn1core): reading a certificate is not the same
+  as trusting it.
+- **asn1core** - parsing the certificate and the TN Authorization List extension is asn1core's
+  codec at work, not shaken's. **Status: exists as code.** `credentials.load_certificates()` and
+  `tnauth.parse_tn_auth_list()` consume `asn1core.cert.parse_certificate` and `asn1core.node.decode`
+  and have passing tests, so the rows that parse DER are no longer deferred. asn1core is a
+  read-only sibling: it is imported by sibling path (`pythonpath` in `pyproject.toml`) and never
+  edited from here. It has no TNAuthList decoder of its own, so shaken carries a small one.
+- **cryptography** (third party, not a sibling) - ES256 signing and verification only; the one
+  importing module is `shaken/jws.py`. The owner's rule is that cryptographic primitives may come
+  from this package and every wire format is ours.
 
-**Gated by coverage, not by absence.** asn1core now has code and a test suite, so shaken is no
-longer waiting for the project to exist. It is still waiting for the structures it needs: a
-roadmap row that parses, encodes or verifies a DER structure cites the asn1core capability it
-consumes, and stays deferred until that capability has a passing test there. No release of
-shaken is promised before asn1core has one of its own.
+**Gated by coverage, not by absence.** pkix path validation is the remaining gate. No release of
+shaken is promised before pkix has one of its own.
 
 ## Sequencing rules
 

@@ -30,9 +30,11 @@ classifiers = [
   "Topic :: System :: Networking",
   "Typing :: Typed",
 ]
-# Empty unless a module cannot be honest without it. Every entry needs a sentence in
-# README.md explaining why the zero-dependency rule was broken for it.
-dependencies = []
+# `cryptography` supplies ECDSA P-256 and nothing else (shaken/jws.py is the one module that
+# imports it); the owner's rule is that primitives may come from it and every wire format is ours.
+# `asn1core` parses the certificates and the TN Authorization List. It resolves from the sibling
+# checkout in this workspace (see `pythonpath` below) until it publishes.
+dependencies = ["asn1core", "cryptography>=43"]
 
 [project.optional-dependencies]
 dev = [
@@ -46,7 +48,6 @@ dev = [
   # first being able to build one, so the build dependency belongs in the dev group.
   "build",
 ]
-crypto = ["cryptography>50.0.2"]
 
 [project.urls]
 Homepage = "https://github.com/b1tninja/shaken"
@@ -69,7 +70,7 @@ include = ["/shaken/", "/tests/", "/docs/", "/README.md", "/ROADMAP.md", "/CHANG
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["."]
+pythonpath = [".", "../asn1core"]
 asyncio_mode = "auto"
 addopts = "-ra"
 
@@ -82,7 +83,7 @@ source = ["shaken"]
 # coverage for the line that raises. Raise this in the commit that implements a
 # milestone, never in a commit that only adds tests, so the number keeps meaning
 # "this behaviour is exercised" rather than "this file was imported".
-fail_under = 45
+fail_under = 80
 show_missing = true
 exclude_lines = [
   "if __name__ == .__main__.:",

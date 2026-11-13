@@ -5,10 +5,13 @@
      the badges stay commented out until the tag exists.
 -->
 
-**Pre-alpha shell.** The package surface, the obligation matrix and the CI gates exist.
-No protocol behaviour is implemented: every public function raises `NotImplementedError`,
-and the test suite records that rather than hiding it. Read
-[ROADMAP.md](ROADMAP.md) before depending on any of it.
+**Pre-alpha.** The codecs are implemented and tested: PASSporT (RFC 8225) with the SHAKEN
+extension (RFC 8588), JWS compact serialisation and ES256 (RFC 7515, RFC 7518), the SIP Identity
+header value (RFC 8224) and the TN Authorization List certificate extension (RFC 8226). What is
+not done is verification as a whole: fetching the certificate from `x5u`, validating its chain
+to an STI trust anchor, checking freshness and binding the token to the call. Those functions
+(`credentials.resolve()`, `verify.verify_request()`, `attest.policy_for()`) still raise
+`NotImplementedError`. Read [ROADMAP.md](ROADMAP.md) before depending on any of it.
 
 shaken -- PASSporT and SIP Identity for telephone traffic
 
@@ -45,26 +48,36 @@ document, which is the honest grain size for a plan. See [docs/rfc-map.md](docs/
 | RFC 8225 | Proposed Standard | 2018-02 | PASSporT: the compact token, its claims and canonicalisation |
 | RFC 8224 | Proposed Standard | 2018-02 | the SIP Identity header and verification behaviour |
 | RFC 8588 | Proposed Standard | 2019-05 | the SHAKEN extension: attestation levels and origin identifier |
+| RFC 8226 | Proposed Standard | 2018-02 | the STIR certificate and its TN Authorization List extension |
+| RFC 7515, RFC 7518 | Proposed Standard | 2015-05 | the JWS container and the ES256 signature format |
 | RFC 9475 | Proposed Standard | 2023-12 | messaging use cases and extensions beyond voice |
 | ATIS-1000074 (SHAKEN) | ATIS / SIP Forum | - | the deployment profile that fixes policy, caching and headers |
 
 ### Errata watch
 
-- RFC 8224 carries 2 verified errata and is updated by RFC 8946; RFC 8588 carries 1 verified erratum.
-- RFC 8225 has 2 errata on file and none verified as of 2026-11-07 (rfclib): 5392 is Held for Document Update and concerns the iat claim, 5985 is Reported and editorial.
+- RFC 8224 carries 2 verified errata and is updated by RFC 8946: 5715 (`dest` is an object of arrays) and 6499 (the digest is base64url); both are applied.
+- RFC 8588 carries 1 verified erratum, 6656 (`iat` is a number); applied.
+- RFC 8225 has 2 errata on file and none verified as of 2026-11-13 (rfclib): 5392 is Held for Document Update and concerns the iat claim, 5985 is Reported and editorial. Its Appendix A signature verifies under neither printed key, and the two keys there are not a pair (the A.2 key belongs to the sec. 7.1 example instead); see [docs/rfc-map.md](docs/rfc-map.md).
 - Policy questions (what to do with a failed verification) belong to ATIS, not the RFCs. Say which document decided.
 
 ## Module layout
 
 | Module | Responsibility |
 |---|---|
-| `passport` | token construction, canonicalisation and signature (RFC 8225) |
+| `passport` | token construction, deterministic JSON, signature and parse (RFC 8225) |
+| `jws` | base64url, the ES256 signature format and a signer and verifier over `cryptography` (RFC 7515, RFC 7518) |
+| `numbers` | telephone number canonicalisation (RFC 8224 sec. 8.3) |
+| `tnauth` | the TN Authorization List certificate extension (RFC 8226) |
 | `claims` | the registered claims and the SHAKEN extension set (RFC 8225, RFC 8588) |
 | `identity` | the SIP header field build and parse (RFC 8224) |
 | `credentials` | x5u retrieval with bounds, x5c validation, CA pinning |
 | `attest` | attestation levels and the policy a verifier applies (RFC 8588) |
 | `verify` | the outcome object: what passed, what was skipped and why |
 | `messaging` | the extensions for non-voice communications (RFC 9475) |
+
+## Dependencies
+
+Two runtime dependencies, each with a reason: `cryptography` for ECDSA P-256 (the standard library has no elliptic-curve signature; only `shaken/jws.py` imports it) and `asn1core` for DER and certificate parsing (a sibling project, resolved from the workspace checkout until it publishes). Every wire format is this project's own. See [docs/strategy.md](docs/strategy.md).
 
 ## What it does not do
 

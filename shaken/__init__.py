@@ -7,7 +7,20 @@ originating provider.
 
 from __future__ import annotations
 
-from . import apps, attest, claims, cli, credentials, identity, messaging, passport, verify
+from . import (
+    apps,
+    attest,
+    claims,
+    cli,
+    credentials,
+    identity,
+    jws,
+    messaging,
+    numbers,
+    passport,
+    tnauth,
+    verify,
+)
 from .attest import policy_for
 from .claims import shaken_claims
 from .credentials import resolve
@@ -27,12 +40,15 @@ __all__ = [
     "create",
     "credentials",
     "identity",
+    "jws",
     "messaging",
+    "numbers",
     "parse_header",
     "passport",
     "policy_for",
     "resolve",
     "shaken_claims",
+    "tnauth",
     "verify",
     "verify_request",
 ]

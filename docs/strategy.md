@@ -19,6 +19,17 @@ are ordered the way they are, and the rules that order has to respect.
 5. **Every answer carries its provenance.** Verified or cached, which document, refused or
    believed. An answer without provenance is a guess with a confident type.
 
+## Dependency exception
+
+The constitution's third rule says dependency-free by default. This project breaks it twice, on
+purpose. **`cryptography`**: ES256 needs ECDSA over P-256, and the standard library has no
+elliptic-curve signature at all; writing one here would be a second, unreviewed implementation of
+the one primitive where a subtle bug is a forgery. It is confined to `shaken/jws.py`, which
+exposes a `Signer` and a `Verifier` protocol, so nothing else imports it. **`asn1core`**: reading
+a certificate and the TN Authorization List is DER parsing, which the portfolio already has in a
+strict codec; it resolves from the sibling checkout until it publishes. The owner's rule: the
+`cryptography` package for primitives, everything else ours.
+
 ## The three tiers
 
 | Tier | Home | Contents | Rule |
