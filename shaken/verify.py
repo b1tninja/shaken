@@ -32,6 +32,8 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+import pkix.validity
+
 from . import claimconstraints, passport, tnauth
 from .credentials import ChainResult, CredentialError, signer_verifier, validate_chain
 from .div import PPT_DIV_O, DivChain, link_chains
@@ -46,10 +48,12 @@ if TYPE_CHECKING:
 
 __all__ = [
     "Credentials",
+    "DateCheck",
     "DivVerdict",
     "Policy",
     "VerificationError",
     "Verified",
+    "check_date_freshness",
     "check_tn_authority",
     "verify_div_chains",
     "verify_div_o",
@@ -117,6 +121,68 @@ class Verified:
 def _check_fresh(iat: int, at: datetime.datetime, window: int, what: str) -> None:
     if abs(at.timestamp() - iat) > window:
         raise VerificationError(f"the {what} iat {iat} is outside the {window} second window")
+
+
+@dataclass(frozen=True, slots=True)
+class DateCheck:
+    """The outcome of a passing ``check_date_freshness``.
+
+    ``iat_differs`` is ``None`` when no ``iat`` was given, else whether it names another second
+    than the Date. ``use_iat`` is true when RFC 8224 sec. 6.2 Step 4 says the signature check
+    (Step 5) should be computed with the ``iat`` in place of the Date.
+    """
+
+    iat_differs: bool | None
+    use_iat: bool
+
+
+def check_date_freshness(
+    date: datetime.datetime,
+    at: datetime.datetime,
+    *,
+    window: int = 60,
+    signer: Certificate | None = None,
+    iat: int | None = None,
+) -> DateCheck:
+    """RFC 8224 sec. 6.2 Step 4: is the request's Date fresh, and inside the signing credential's validity.
+
+    ``date`` is the SIP ``Date`` header already parsed to a timezone-aware instant and ``at`` the
+    verification time; no SIP request is modelled. Step 4: the Date must meet local policy for
+    freshness ("sixty seconds is RECOMMENDED", ``window``) and "fall within the validity period
+    of the credential used to sign" (``signer``, checked at the Date by ``pkix.validity``; pass
+    ``None`` to skip that half). A Date from the future by more than ``window`` is refused as
+    well, a convention this package applies everywhere (``Policy``): the RFC names only stale
+    values. The Date has one-second resolution, so the comparison is in whole seconds.
+
+    With ``iat`` (the full form of PASSporT): "the verifier SHOULD compare the iat value ... to
+    the Date". When they differ and the ``iat`` is itself within ``window`` of ``at``, the result
+    says ``use_iat`` so Step 5 is computed with the ``iat`` instead of the Date. An ``iat`` that
+    differs and is not fresh is not used, and does not fail this check: the RFC attaches no
+    refusal to it, and the Date is then what the signature must cover.
+
+    Raises:
+        VerificationError: the Date is stale or from the future, or outside the credential's
+            validity. RFC 8224 sec. 6.2.2 maps a stale Date to a 403 "Forbidden" response.
+        ValueError: ``date`` or ``at`` is naive, or ``window`` is negative.
+    """
+    for name, value in (("date", date), ("at", at)):
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError(f"{name} must be timezone-aware")
+    if window < 0:
+        raise ValueError("a freshness window cannot be negative")
+    date_seconds = int(date.timestamp())
+    if abs(int(at.timestamp()) - date_seconds) > window:
+        raise VerificationError(f"the Date header is outside the {window} second window")
+    if signer is not None:
+        result = pkix.validity.check_validity(signer, date)
+        if not result.ok:
+            raise VerificationError(
+                f"the Date header is outside the signing credential's validity ({result.reason})"
+            )
+    if iat is None:
+        return DateCheck(None, False)
+    differs = iat != date_seconds
+    return DateCheck(differs, differs and abs(int(at.timestamp()) - iat) <= window)
 
 
 def verify_passport(

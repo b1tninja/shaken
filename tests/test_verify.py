@@ -27,8 +27,10 @@ from shaken.div import ChainError, div_claims, div_header, div_o_claims
 from shaken.jws import Es256Signer
 from shaken.tnauth import ID_PE_TNAUTHLIST
 from shaken.verify import (
+    DateCheck,
     Policy,
     VerificationError,
+    check_date_freshness,
     check_tn_authority,
     verify_div_chains,
     verify_div_o,
@@ -437,3 +439,52 @@ def test_div_o_nested_opt_is_verified_as_a_chain():
     # the outer token must be a div-o
     with pytest.raises(VerificationError, match="div-o"):
         verify_div_o(inner_token, credentials, (ROOT,), AT, ("tn", FIRST))
+
+
+def at(seconds):
+    return AT + datetime.timedelta(seconds=seconds)
+
+
+def test_date_freshness_step_4():
+    """RFC 8224 sec. 6.2 Step 4: the Date within the window and inside the credential's validity."""
+    signer = Party("alice", [ORIG]).cert  # valid from 30 days before AT to 365 days after
+    # sixty seconds is RECOMMENDED: the boundary is inside, one second more is stale
+    assert check_date_freshness(at(-60), AT, signer=signer) == DateCheck(None, False)
+    assert check_date_freshness(at(60), AT) == DateCheck(None, False)
+    with pytest.raises(VerificationError, match="60 second"):
+        check_date_freshness(at(-61), AT, signer=signer)
+    with pytest.raises(VerificationError, match="60 second"):
+        check_date_freshness(at(61), AT)  # from the future is refused too, a convention
+    # the window is local policy
+    assert check_date_freshness(at(-300), AT, window=300).iat_differs is None
+    with pytest.raises(VerificationError):
+        check_date_freshness(at(-301), AT, window=300)
+    # the Date must also be inside the validity period of the credential that signed
+    with pytest.raises(VerificationError, match="not_yet_valid"):
+        check_date_freshness(
+            AT - datetime.timedelta(days=31), AT - datetime.timedelta(days=31), signer=signer
+        )
+    late = AT + datetime.timedelta(days=366)
+    with pytest.raises(VerificationError, match="expired"):
+        check_date_freshness(late, late, signer=signer)
+    # a naive instant has no meaning and a negative window is a mistake
+    with pytest.raises(ValueError, match="timezone-aware"):
+        check_date_freshness(datetime.datetime(2026, 6, 1, 12, 0), AT)
+    with pytest.raises(ValueError, match="negative"):
+        check_date_freshness(AT, AT, window=-1)
+
+
+def test_date_freshness_compares_the_iat_of_the_full_form():
+    """Step 4: if iat differs from the Date but is within policy, Step 5 should use the iat."""
+    date = at(-10)
+    same = check_date_freshness(date, AT, iat=int(date.timestamp()))
+    assert same == DateCheck(False, False)
+    near = check_date_freshness(date, AT, iat=NOW - 3)
+    assert near == DateCheck(True, True)
+    # an iat that differs and is itself stale is not used, and does not fail the request
+    stale = check_date_freshness(date, AT, iat=NOW - 3600)
+    assert stale == DateCheck(True, False)
+    # the Date's whole second is what is compared
+    assert check_date_freshness(date + datetime.timedelta(milliseconds=500), AT, iat=NOW - 10) == (
+        DateCheck(False, False)
+    )
