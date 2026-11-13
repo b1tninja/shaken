@@ -6,8 +6,9 @@ has ``mustInclude`` and ``permittedValues``. ``id-pe-eJWTClaimConstraints`` (RFC
 ``EXPLICIT TAGS``, so each ``[n]`` wraps the SEQUENCE it names (RFC 9118 Figure 2 shows it).
 
 RFC 9118 updates RFC 8226 and defines no way to say which one wins when a certificate carries
-both; ``from_certificate`` prefers the enhanced extension and ``parse_`` of either is available
-for a caller with another policy.
+both. The owner's decision (PORTFOLIO.md sec. 9 item 15) is that both apply and a verifier fails
+closed on either: ``from_certificate`` returns every extension the certificate carries and
+``check_claims`` reports the violations of each.
 
 What is decided here is the CA's statement. Whether the certificate chains to a trust anchor is
 ``credentials``' business; this module checks a claims set against what the extension says.
@@ -23,7 +24,7 @@ from asn1core.node import Node, decode
 from asn1core.tag import TagClass
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Mapping, Sequence
 
     from asn1core.cert import Certificate
 
@@ -166,24 +167,27 @@ def parse_constraints(der: bytes, *, enhanced: bool) -> JwtClaimConstraints:
     return JwtClaimConstraints(must_include, permitted, must_exclude, enhanced, ignored)
 
 
-def from_certificate(certificate: Certificate) -> JwtClaimConstraints | None:
-    """The certificate's claim constraints, or ``None`` when it carries neither extension.
+def from_certificate(certificate: Certificate) -> tuple[JwtClaimConstraints, ...]:
+    """Every claim constraint the certificate carries: RFC 8226's first, then RFC 9118's.
 
-    The enhanced extension (RFC 9118) wins when both are present. Both are non-critical and only
-    for end-entity certificates (RFC 8226 sec. 8 para 1, RFC 9118 sec. 3 para 1); a critical or
-    CA one is read all the same, since refusing it would hide what the CA wrote.
+    Empty when it carries neither. When it carries both, both apply: neither RFC says one wins,
+    so ``check_claims`` fails closed on either. Both are non-critical and only for end-entity
+    certificates (RFC 8226 sec. 8 para 1, RFC 9118 sec. 3 para 1); a critical or CA one is read
+    all the same, since refusing it would hide what the CA wrote.
     """
-    extension = certificate.extension(ID_PE_EJWT_CLAIM_CONSTRAINTS)
-    if extension is not None:
-        return parse_constraints(extension.value, enhanced=True)
+    found: list[JwtClaimConstraints] = []
     extension = certificate.extension(ID_PE_JWT_CLAIM_CONSTRAINTS)
     if extension is not None:
-        return parse_constraints(extension.value, enhanced=False)
-    return None
+        found.append(parse_constraints(extension.value, enhanced=False))
+    extension = certificate.extension(ID_PE_EJWT_CLAIM_CONSTRAINTS)
+    if extension is not None:
+        found.append(parse_constraints(extension.value, enhanced=True))
+    return tuple(found)
 
 
 def check_claims(
-    constraints: JwtClaimConstraints | None, claims: Mapping[str, Any]
+    constraints: JwtClaimConstraints | Sequence[JwtClaimConstraints] | None,
+    claims: Mapping[str, Any],
 ) -> tuple[str, ...]:
     """Every way ``claims`` (a PASSporT payload) breaks what the certificate allows.
 
@@ -191,11 +195,24 @@ def check_claims(
     required (RFC 8226 sec. 8 item 1; RFC 9118 sec. 3 item 1), constraints or not. A permitted
     value must match exactly (RFC 9118) and so must be a JSON string equal to one listed; a claim
     that is absent is not a violation of ``permittedValues`` (RFC 9118 sec. 4, second bullet).
-    An ``ignored`` extension applies nothing beyond the baseline.
+    An ``ignored`` extension applies nothing beyond the baseline. A sequence (what
+    ``from_certificate`` returns) applies every member, so a claims set must satisfy each one.
     """
     problems = [f"{name} must appear" for name in sorted(BASELINE_CLAIMS - claims.keys())]
-    if constraints is None or constraints.ignored:
+    if constraints is None:
         return tuple(problems)
+    if isinstance(constraints, JwtClaimConstraints):
+        constraints = (constraints,)
+    for one in constraints:
+        problems += _check_one(one, claims)
+    return tuple(problems)
+
+
+def _check_one(constraints: JwtClaimConstraints, claims: Mapping[str, Any]) -> list[str]:
+    """The violations of one extension, beyond the baseline."""
+    problems: list[str] = []
+    if constraints.ignored:
+        return problems
     problems += [
         f"{name} must appear (mustInclude)"
         for name in constraints.must_include
@@ -209,4 +226,4 @@ def check_claims(
         for name in constraints.must_exclude
         if name in claims
     ]
-    return tuple(problems)
+    return problems

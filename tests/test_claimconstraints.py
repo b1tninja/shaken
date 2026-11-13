@@ -12,6 +12,8 @@ from asn1core import pem
 from asn1core.cert import parse_certificate
 
 from shaken.claimconstraints import (
+    ID_PE_EJWT_CLAIM_CONSTRAINTS,
+    ID_PE_JWT_CLAIM_CONSTRAINTS,
     ClaimConstraintsError,
     JwtClaimConstraints,
     check_claims,
@@ -78,7 +80,7 @@ def ext(*, include=None, permitted=None, exclude=None) -> bytes:
 
 def test_claim_constraints():
     der = pem.certificates(RFC9118_CERT.encode())[0].der
-    constraints = from_certificate(parse_certificate(der))
+    (constraints,) = from_certificate(parse_certificate(der))
     # RFC 9118 sec. 5: confidence must be present, "high" or "medium", and priority excluded
     assert constraints == JwtClaimConstraints(
         must_include=("confidence",),
@@ -130,3 +132,39 @@ def test_baseline_claim_in_must_exclude_means_extension_is_ignored():
     # a baseline name in mustInclude is allowed but flagged: SHOULD NOT
     flagged = parse_constraints(ext(include=["iat", "x"]), enhanced=True)
     assert flagged.redundant_baseline == ("iat",)
+
+
+class _Ext:
+    def __init__(self, value: bytes) -> None:
+        self.value = value
+
+
+class _Cert:
+    """Just enough of a Certificate: ``extension(oid)`` by dotted OID."""
+
+    def __init__(self, extensions: dict[str, bytes]) -> None:
+        self._extensions = extensions
+
+    def extension(self, oid: str):
+        value = self._extensions.get(oid)
+        return None if value is None else _Ext(value)
+
+
+def test_both_extensions_apply_and_fail_closed():
+    # PORTFOLIO.md sec. 9 item 15: a certificate carrying RFC 8226's and RFC 9118's claim
+    # constraints is held to both; neither wins, and a violation of either is reported.
+    cert = _Cert(
+        {
+            ID_PE_JWT_CLAIM_CONSTRAINTS: ext(include=["a"], permitted=("b", "x")),
+            ID_PE_EJWT_CLAIM_CONSTRAINTS: ext(include=["c"], exclude=["d"]),
+        }
+    )
+    both = from_certificate(cert)
+    assert [one.enhanced for one in both] == [False, True]
+    assert check_claims(both, BASE | {"a": 1, "b": "x", "c": 1}) == ()
+    assert check_claims(both, BASE | {"b": "x", "c": 1}) == ("a must appear (mustInclude)",)  # 8226
+    assert check_claims(both, BASE | {"a": 1, "c": 1, "d": 1})  # 9118 mustExclude
+    assert check_claims(both, BASE | {"a": 1, "b": "y", "c": 1})  # 8226 permittedValues
+    # the older extension alone, and neither, still read
+    assert len(from_certificate(_Cert({ID_PE_JWT_CLAIM_CONSTRAINTS: ext(include=["a"])}))) == 1
+    assert from_certificate(_Cert({})) == ()
