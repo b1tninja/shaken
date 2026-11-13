@@ -10,9 +10,14 @@ shipped.
 
 from __future__ import annotations
 
+import datetime
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from asn1core import pem
+import pkix.chain
+import pkix.errors
+import pkix.validity
+from asn1core import names_equal, pem
 from asn1core.cert import Certificate, parse_certificate
 from asn1core.errors import Asn1Error
 
@@ -25,10 +30,12 @@ if TYPE_CHECKING:
 
 __all__ = [
     "MAX_CHAIN",
+    "ChainResult",
     "CredentialError",
     "load_certificates",
     "resolve",
     "signer_verifier",
+    "validate_chain",
 ]
 
 MAX_CHAIN = 8
@@ -73,3 +80,88 @@ def resolve(x5u: str | None, x5c: list | None, store: TrustStore) -> Certificate
     raises on purpose so nothing downstream mistakes it for working code.
     """
     raise NotImplementedError("resolve() is not implemented: RFC 8225 sec. 4.3")
+
+
+@dataclass(frozen=True, slots=True)
+class ChainResult:
+    """A chain that validated: the path (signer first), the anchor that closed it, and what was proved.
+
+    ``checked`` names every check applied. It is deliberately explicit, because RFC 5280 sec. 6.1
+    is larger than what is checked here: name, policy and path-length constraints, key usage,
+    critical extensions and revocation are not (``pkix`` has not shipped those rows). A caller that
+    needs them must not read ``ChainResult`` as full path validation.
+    """
+
+    path: tuple[Certificate, ...]
+    anchor: Certificate
+    checked: tuple[str, ...]
+
+
+CHECKED = (
+    "issuer name linkage (RFC 5280 sec. 6.1.3(a)(4), 7.1)",
+    "validity period at the given time (sec. 6.1.3(a)(2))",
+    "signature of each certificate under its issuer's key (sec. 6.1.3(a)(1))",
+    "each issuing certificate asserts cA (sec. 4.2.1.9)",
+)
+
+
+def validate_chain(
+    signer: Certificate,
+    intermediates: tuple[Certificate, ...],
+    anchors: tuple[Certificate, ...],
+    at: datetime.datetime,
+) -> ChainResult:
+    """Validate ``signer`` to one of the STI trust ``anchors`` with ``pkix``, as of ``at``.
+
+    RFC 8226 sec. 4 and 7 leave acquisition open and certificate validity to RFC 5280 sec. 6, so
+    this runs the part of that algorithm ``pkix`` provides today (see ``ChainResult.checked``):
+    candidate paths by issuer name, then for each the validity of every certificate, each
+    signature under its issuer's key (the anchor's key closes the path) and the ``cA`` assertion of
+    every issuing certificate. The first candidate that passes wins. The anchors are the caller's
+    pinned STI-CA roots; which roots those are is not decided here (the owner's trust-anchor
+    decision, see ROADMAP.md), and no store is read.
+
+    A certificate's ``TNAuthList`` is not consulted: ``verify.tn-authority`` does that, after this.
+
+    Raises:
+        CredentialError: no candidate path passes; the message says why the last one failed.
+    """
+    candidates = pkix.chain.candidates(signer, intermediates, anchors)
+    if not candidates:
+        raise CredentialError("no certification path from the signer to an STI trust anchor")
+    why = "no candidate passed"
+    for path in candidates:
+        try:
+            anchor = _check_path(path, anchors, at)
+        except _PathRefusedError as failure:
+            why = str(failure)
+            continue
+        return ChainResult(tuple(path), anchor, CHECKED)
+    raise CredentialError(f"no valid path to an STI trust anchor: {why}")
+
+
+class _PathRefusedError(Exception):
+    pass
+
+
+def _check_path(
+    path: list[Certificate], anchors: tuple[Certificate, ...], at: datetime.datetime
+) -> Certificate:
+    anchor = next((a for a in anchors if names_equal(path[-1].issuer, a.subject)), None)
+    if anchor is None:  # pragma: no cover - candidates() ended the path at an anchor name
+        raise _PathRefusedError("the path does not end at an anchor")
+    issuers = [*path[1:], anchor]
+    for certificate, issuer in zip(path, issuers, strict=True):
+        if not pkix.validity.check_validity(certificate, at).ok:
+            raise _PathRefusedError(f"{certificate.subject} is not valid at {at.isoformat()}")
+        if not pkix.chain.may_issue(issuer):
+            raise _PathRefusedError(
+                f"{issuer.subject} may not issue certificates (cA is not asserted)"
+            )
+        try:
+            pkix.validity.check_signature(certificate, issuer)
+        except pkix.errors.PkixError as error:
+            raise _PathRefusedError(f"signature of {certificate.subject}: {error}") from error
+    if not pkix.validity.check_validity(anchor, at).ok:
+        raise _PathRefusedError("the trust anchor is not valid at the given time")
+    return anchor

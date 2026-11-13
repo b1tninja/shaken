@@ -58,7 +58,7 @@ rather than merely incomplete.
    ECDSA P-256 and nothing else, and only `shaken/jws.py` imports it. `asn1core` (a sibling
    checkout, `D:\code\asn1core`, resolved through `pythonpath`) parses certificates and DER.
    Everything else is ours: the JSON, JWS and PASSporT codecs, the Identity header, the TN
-   Authorization List. `pkix` and `asn1core` are read-only siblings; do not edit them from here.
+   Authorization List, the JWT claim constraints, the "div" and "msg" types. `pkix` (sibling checkout `D:\code\pkix`, with its `sigwire`) validates the certificate chain in `credentials.validate_chain` and does nothing else here. `pkix` and `asn1core` are read-only siblings; do not edit them from here.
    Adding another runtime dependency needs a paragraph of justification in `docs/strategy.md`.
 5. **Scope.** What is deliberately absent is listed under Non-goals in `README.md`.
    An agent that "helpfully" implements a non-goal has expanded the API surface that

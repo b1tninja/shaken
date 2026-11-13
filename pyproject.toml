@@ -33,8 +33,9 @@ classifiers = [
 # `cryptography` supplies ECDSA P-256 and nothing else (shaken/jws.py is the one module that
 # imports it); the owner's rule is that primitives may come from it and every wire format is ours.
 # `asn1core` parses the certificates and the TN Authorization List. It resolves from the sibling
-# checkout in this workspace (see `pythonpath` below) until it publishes.
-dependencies = ["asn1core", "cryptography>=43"]
+# checkout in this workspace (see `pythonpath` below) until it publishes. `pkix` (ours) validates the
+# certificate chain in `credentials.validate_chain` and resolves the same way; it brings `sigwire`.
+dependencies = ["asn1core", "pkix", "cryptography>=43"]
 
 [project.optional-dependencies]
 dev = [
@@ -70,7 +71,7 @@ include = ["/shaken/", "/tests/", "/docs/", "/README.md", "/ROADMAP.md", "/CHANG
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = [".", "../asn1core"]
+pythonpath = [".", "../asn1core", "../pkix", "../sigwire"]
 asyncio_mode = "auto"
 addopts = "-ra"
 
